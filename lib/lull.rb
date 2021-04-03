@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'net/http'
 require 'rest-client'
 
 # Helper class for making rest calls
@@ -21,6 +22,7 @@ class Lull
                                            timeout: @config['timeout'], url: @url, verify_ssl: false)
   rescue SocketError, IOError => e
     puts "#{e.class}: #{e.message}"
+    custom_response
   rescue StandardError => e
     e.response
   else
@@ -53,6 +55,12 @@ class Lull
   end
 
   private
+
+  def custom_response
+    net_response = Net::HTTPResponse.new(1.0, 599, 'Error')
+    request = RestClient::Request.new(method: :Get, url: 'http://example.com')
+    RestClient::Response.create('Can not connect or host not found', net_response, request, nil)
+  end
 
   def error_text(method_name, url, wanted)
     {
