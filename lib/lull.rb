@@ -6,6 +6,7 @@ require 'rest-client'
 # Helper class for making rest calls
 class Lull
   attr_accessor :headers, :meth, :params, :url, :config
+  attr_reader :response
 
   def initialize(headers: {}, meth: 'Get', params: {}, url: 'https://test/', config: {})
     @headers = headers
@@ -17,16 +18,16 @@ class Lull
   end
 
   def make_call
-    response = RestClient::Request.execute(headers: @headers,
-                                           method: @meth, payload: @params,
-                                           timeout: @config['timeout'], url: @url, verify_ssl: false)
+    @response = RestClient::Request.execute(headers: @headers,
+                                            method: @meth, payload: @params,
+                                            timeout: @config['timeout'], url: @url, verify_ssl: false)
   rescue SocketError, IOError => e
     puts "#{e.class}: #{e.message}"
-    custom_response
+    @response = custom_response(e.class, e.message)
   rescue StandardError => e
-    e.response
+    @response = e.response
   else
-    response
+    @response
   end
 
   def cookie
@@ -43,23 +44,21 @@ class Lull
   # use rest-client with retry
   def rest_try(tries = 3)
     tries.times do |i|
-      response = make_call
-      unless response.nil?
-        break response if (200..299).include? response.code
-        break response if i > 1
-      end
+      make_call
+      break if (200..299).include? @response.code
+
       puts "Failed #{@meth} on #{@url}, retry...#{i + 1}"
       sleep 3 unless i > 1
-      return nil if i > 1 # Handles socket errors, etc. where there is no response.
     end
+    @response
   end
 
   private
 
-  def custom_response
-    net_response = Net::HTTPResponse.new(1.0, 599, 'Error')
+  def custom_response(e_class, e_message)
+    net_response = Net::HTTPResponse.new(1.0, 599, e_class)
     request = RestClient::Request.new(method: :Get, url: 'http://example.com')
-    RestClient::Response.create('Can not connect or host not found', net_response, request, nil)
+    RestClient::Response.create(e_message, net_response, request, nil)
   end
 
   def error_text(method_name, url, wanted)
